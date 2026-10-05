@@ -1,0 +1,83 @@
+name: TICKET-12 check
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+
+      - name: Existing tests still pass
+        id: existing
+        continue-on-error: true
+        run: npx vitest run
+
+      - name: TICKET-12 is fixed
+        id: ticket
+        continue-on-error: true
+        run: |
+          mkdir -p src/__acceptance__
+          cp .github/acceptance/ticket12.test.tsx src/__acceptance__/
+          npx vitest run src/__acceptance__
+
+      - name: No new packages added
+        id: packages
+        continue-on-error: true
+        run: |
+          git show ${{ github.event.pull_request.base.sha }}:package.json > /tmp/base.json
+          node -e "
+            const a=require('/tmp/base.json'), b=require('./package.json');
+            const names=o=>Object.keys({...(o.dependencies||{}),...(o.devDependencies||{})});
+            const added=names(b).filter(n=>!names(a).includes(n));
+            if(added.length){console.log('New packages:',added.join(', '));process.exit(1)}
+            console.log('No new packages')"
+
+      - name: No unsafe HTML
+        id: safehtml
+        continue-on-error: true
+        run: |
+          if grep -rn "dangerouslySetInnerHTML" src; then echo "Unsafe HTML found"; exit 1; fi
+
+      - name: A test was added or changed
+        id: tests
+        continue-on-error: true
+        run: |
+          git diff --name-only ${{ github.event.pull_request.base.sha }}...HEAD | grep -E '\.test\.(ts|tsx)$'
+
+      - name: Send result to the live board
+        if: always()
+        env:
+          LOGIN: ${{ github.event.pull_request.user.login }}
+          PR: ${{ github.event.pull_request.number }}
+          URL: ${{ github.event.pull_request.html_url }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          node -e "
+            const ok = s => s === 'success';
+            const body = { kind: 'ci1', login: process.env.LOGIN, pr: +process.env.PR, url: process.env.URL, title: process.env.TITLE,
+              existing: ok('${{ steps.existing.outcome }}'), ticket: ok('${{ steps.ticket.outcome }}'),
+              packages: ok('${{ steps.packages.outcome }}'), safehtml: ok('${{ steps.safehtml.outcome }}'),
+              tests: ok('${{ steps.tests.outcome }}'), at: new Date().toISOString() };
+            fetch('https://bd-ai-survey.vercel.app/api/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+              .then(r => console.log('board:', r.status)).catch(e => console.log('board unreachable', e.message));"
+
+      - name: Result
+        if: always()
+        run: |
+          echo "Existing tests: ${{ steps.existing.outcome }}"
+          echo "TICKET-12 fixed: ${{ steps.ticket.outcome }}"
+          echo "No new packages: ${{ steps.packages.outcome }}"
+          echo "No unsafe HTML:  ${{ steps.safehtml.outcome }}"
+          echo "Test added:      ${{ steps.tests.outcome }}"
+          [ "${{ steps.existing.outcome }}${{ steps.ticket.outcome }}${{ steps.packages.outcome }}${{ steps.safehtml.outcome }}${{ steps.tests.outcome }}" = "successsuccesssuccesssuccesssuccess" ]
