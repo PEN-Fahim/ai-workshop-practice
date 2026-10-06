@@ -12,6 +12,16 @@ When the password is wrong, the login page does nothing.
 - Add a test for the wrong-password case
 - File: `src/pages/LoginPage.tsx`
 
+## TICKET-13 · Bonus: password strength (if you finish early)
+
+On the signup page (`npm run dev`, then open `/#signup`), show how strong the password is, under the password field:
+
+- Short or simple password → show **Weak**
+- Long password with letters, numbers and symbols → show **Strong**
+- File: `src/pages/SignupPage.tsx`
+
+Read `CLAUDE.md` before you start. The checks will notice if you break a rule.
+
 ## How to do it
 
 1. **Fork** this repo to your GitHub account, then clone your fork.
