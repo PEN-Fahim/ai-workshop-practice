@@ -19,3 +19,8 @@ test('a wrong password shows an error under the password field', async () => {
   expect(screen.getByLabelText('Password')).toHaveAttribute('aria-invalid', 'true')
   expect(screen.queryByText(/Welcome/)).not.toBeInTheDocument()
 })
+
+test('the error is not shown before submitting', () => {
+  render(<LoginPage />)
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
